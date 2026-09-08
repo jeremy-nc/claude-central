@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Hub</title>
+<style>
+  :root{--bg:#12151b;--panel:#1a1e26;--bd:#2a303a;--fg:#c9d1d9;--dim:#6b7480;
+        --hub:#4a8fd4;--u:#d29a38;--d:#4a8fd4;--a:#44a05e;
+        --mono:ui-monospace,"SF Mono",Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;padding:20px;background:var(--bg);color:var(--fg);
+       font-family:var(--mono);font-size:13px;line-height:1.6}
+  h1{font-size:16px;margin:0 0 4px}
+  h1 span{color:var(--hub)}
+  .sub{color:var(--dim);font-size:11.5px;margin-bottom:18px}
+  .grid{display:grid;gap:14px;grid-template-columns:1fr;max-width:1300px}
+  @media(min-width:900px){.grid{grid-template-columns:1fr 1fr}}
+  .panel{background:var(--panel);border:1px solid var(--bd);border-radius:6px;padding:14px}
+  .panel h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 10px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  td,th{text-align:left;padding:4px 8px;border-top:1px solid var(--bd);vertical-align:top}
+  th{color:var(--dim);font-weight:400;border-top:none;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em}
+  .pill{padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600;white-space:nowrap}
+  .pill.unread{color:var(--u);background:rgba(210,154,56,.15)}
+  .pill.delivered{color:var(--d);background:rgba(74,143,212,.15)}
+  .pill.acted{color:var(--a);background:rgba(68,160,94,.15)}
+  input,textarea,button{font-family:var(--mono);font-size:12.5px;background:var(--bg);
+      color:var(--fg);border:1px solid var(--bd);border-radius:4px;padding:7px 9px}
+  input:focus,textarea:focus{outline:1px solid var(--hub)}
+  button{cursor:pointer}
+  button:hover{border-color:var(--hub)}
+  button.primary{background:var(--hub);border-color:var(--hub);color:#fff;font-weight:600}
+  form{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start}
+  form textarea{flex:1;min-width:220px;min-height:38px;resize:vertical}
+  .who{display:flex;gap:8px;align-items:center;margin-bottom:16px}
+  .who input{width:130px}
+  .view{max-height:340px;overflow-y:auto;white-space:pre-wrap;font-size:12px}
+  .view .u::before{content:"❯ ";color:var(--u)}
+  .view .as::before{content:"⏺ ";color:var(--hub)}
+  .view div{margin:4px 0}
+  .empty{color:var(--dim);font-style:italic}
+  .ackbtns button{font-size:10px;padding:2px 7px;margin-left:4px}
+  .msg-body{max-width:340px;word-break:break-word}
+  .full{grid-column:1/-1}
+</style>
+</head>
+<body>
+<h1>SESSION <span>HUB</span></h1>
+<div class="sub">contribute to the central Claude session — messages are mediated, never injected</div>
+
+<div class="who">
+  you are: <input id="me" placeholder="your name" autocomplete="off">
+  <span class="sub" id="conn"></span>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Send to the central session</h2>
+    <form id="sendform">
+      <textarea id="body" placeholder="your suggestion…" required></textarea>
+      <button class="primary" type="submit">send → central</button>
+    </form>
+    <h2 style="margin-top:18px">Your inbox (replies &amp; receipts)</h2>
+    <div id="inbox" class="empty">—</div>
+  </div>
+
+  <div class="panel">
+    <h2>Central session — curated view</h2>
+    <div id="view" class="view empty">—</div>
+  </div>
+
+  <div class="panel full">
+    <h2>Messages table — behind the scenes</h2>
+    <div id="msgs" class="empty">—</div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const me = $('me');
+me.value = localStorage.getItem('hub-user') ?? '';
+me.addEventListener('change', () => localStorage.setItem('hub-user', me.value.trim()));
+const esc = (t) => t.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+async function api(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { 'content-type': 'application/json', 'x-hub-user': me.value.trim() || 'anon' },
+    ...(body && { body: JSON.stringify(body) }),
+  });
+  return res.json();
+}
+
+$('sendform').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!me.value.trim()) { me.focus(); return; }
+  await api('POST', '/api/send', { to: 'central', body: $('body').value });
+  $('body').value = '';
+  refresh();
+});
+
+async function ack(id, level, detail) {
+  await api('POST', '/api/ack', { id, level, detail });
+  refresh();
+}
+
+function pill(m) {
+  return `<span class="pill ${m.status}">${m.status}${m.actedDetail ? ': ' + esc(m.actedDetail) : ''}</span>`;
+}
+
+async function refresh() {
+  try {
+    const { messages } = await api('GET', '/api/status');
+    $('conn').textContent = 'hub connected';
+
+    $('msgs').innerHTML = messages.length
+      ? `<table><tr><th>id</th><th>route</th><th>message</th><th>status</th></tr>` +
+        messages.map((m) =>
+          `<tr><td>${m.id}</td><td>${esc(m.from)} → ${esc(m.to)}</td>` +
+          `<td class="msg-body">${esc(m.body)}${m.replyTo ? ` <span class="sub">(reply to ${m.replyTo})</span>` : ''}</td>` +
+          `<td>${pill(m)}</td></tr>`).join('') + `</table>`
+      : '<span class="empty">no messages yet</span>';
+
+    const mine = messages.filter((m) => m.to === me.value.trim());
+    $('inbox').innerHTML = mine.length
+      ? mine.map((m) =>
+          `<div>${pill(m)} <b>${esc(m.from)}</b>: ${esc(m.body)}` +
+          (m.status !== 'acted'
+            ? `<span class="ackbtns"><button onclick="ack('${m.id}','delivered')">seen</button>` +
+              `<button onclick="ack('${m.id}','acted','noted')">acted</button></span>` : '') +
+          `</div>`).join('')
+      : '<span class="empty">nothing addressed to you</span>';
+
+    const view = await api('GET', '/api/session-view');
+    $('view').innerHTML = view.available && view.turns.length
+      ? view.turns.map((t) => `<div class="${t.role === 'user' ? 'u' : 'as'}">${esc(t.text)}</div>`).join('')
+      : `<span class="empty">${view.reason ?? 'session view empty'}</span>`;
+    if (view.available) $('view').scrollTop = $('view').scrollHeight;
+  } catch {
+    $('conn').textContent = 'hub unreachable';
+  }
+}
+refresh();
+setInterval(refresh, 2500);
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "shared-claude-session",
+  "version": "0.1.0",
+  "description": "Session Hub — cross-account messaging into a central Claude Code session. 'SendMessage for other people's agents.'",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "bash test/e2e.sh"
+  },
+  "engines": { "node": ">=18" }
+}

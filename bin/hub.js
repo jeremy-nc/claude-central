@@ -50,7 +50,8 @@ try {
       const msgs = await call('GET', `/api/inbox${'all' in flags ? '?all=1' : ''}`, { user });
       if (!msgs.length) console.log('(inbox empty)');
       for (const m of msgs) {
-        console.log(`${m.id} [${m.status}] from ${m.from}: ${m.body}${m.replyTo ? `  (reply to ${m.replyTo})` : ''}`);
+        const status = `${m.status}${m.actedDetail ? `:${m.actedDetail}` : ''}`;
+        console.log(`${m.id} [${status}] from ${m.from}: ${m.body}${m.replyTo ? `  (reply to ${m.replyTo})` : ''}`);
       }
       break;
     }

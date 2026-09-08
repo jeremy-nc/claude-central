@@ -14,6 +14,7 @@ export class Store {
     this.logPath = join(dataDir, 'events.jsonl');
     this.messages = new Map(); // id -> message record
     this.sessions = new Map(); // owner -> { transcriptPath, sessionId, ts }
+    this.relayedTurns = new Set(); // assistant-turn uuids already swept for @name relays
     if (existsSync(this.logPath)) {
       for (const line of readFileSync(this.logPath, 'utf8').split('\n')) {
         if (line.trim()) this.#apply(JSON.parse(line));
@@ -41,6 +42,8 @@ export class Store {
         msg.status = event.level;
         if (event.level === 'acted') msg.actedDetail = event.detail ?? null;
       }
+    } else if (event.type === 'relay') {
+      this.relayedTurns.add(event.uuid);
     } else if (event.type === 'session') {
       this.sessions.set(event.owner, {
         transcriptPath: event.transcriptPath, sessionId: event.sessionId, ts: event.ts,
@@ -86,5 +89,14 @@ export class Store {
 
   sessionFor(owner) {
     return this.sessions.get(owner) ?? null;
+  }
+
+  isRelayed(uuid) {
+    return this.relayedTurns.has(uuid);
+  }
+
+  markRelayed(owner, uuid) {
+    if (this.relayedTurns.has(uuid)) return;
+    this.#append({ type: 'relay', owner, uuid, ts: new Date().toISOString() });
   }
 }

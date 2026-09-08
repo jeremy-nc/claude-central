@@ -9,6 +9,7 @@ import { Store } from './store.js';
 import { sessionView } from './tailer.js';
 import { forkSession } from './fork.js';
 import { handleMcp } from './mcp.js';
+import { sweepTranscript } from './relay.js';
 import { resolveUser, identityMode } from './identity.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -95,6 +96,19 @@ const server = createServer(async (req, res) => {
     });
   }
 });
+
+// Chat-is-the-reply-channel: sweep registered transcripts for `@name:` lines in
+// the agent's visible responses and relay them as messages (see relay.js).
+const RELAY_MS = Number(process.env.HUB_RELAY_MS ?? 2000);
+setInterval(() => {
+  for (const owner of store.sessions.keys()) {
+    try {
+      sweepTranscript(store, owner);
+    } catch {
+      // transcript mid-write or missing — next sweep catches up
+    }
+  }
+}, RELAY_MS).unref();
 
 // In serve mode remote traffic must only be able to arrive via the local
 // `tailscale serve` proxy — bind localhost so the identity header can't be

@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 const MAX_TURNS = 50;
 const MAX_TEXT = 600;
 
-function extractText(content) {
+export function extractText(content) {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return content

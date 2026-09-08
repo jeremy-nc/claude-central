@@ -17,7 +17,7 @@ cat > "$TRANSCRIPT" <<'EOF'
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Cut-over is done. Open decision: the retry policy."}]},"timestamp":"2026-09-08T01:00:05Z"}
 EOF
 
-HUB_PORT=$PORT HUB_DATA=$DATA node src/server.js & SERVER_PID=$!
+HUB_PORT=$PORT HUB_DATA=$DATA HUB_RELAY_MS=300 node src/server.js & SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null' EXIT
 for _ in $(seq 1 20); do curl -sf "$HUB_URL/api/status" >/dev/null 2>&1 && break; sleep 0.1; done
 
@@ -154,6 +154,26 @@ check "tailscale identity used" "$OUT" '"from": "real@tailnet.example"'
 OUT=$(curl -s -X POST "http://127.0.0.1:$PORT2/api/send" -H 'content-type: application/json' \
   -H 'X-Hub-User: local-hook' -d '{"to":"central","body":"local fallback"}')
 check "local header fallback works" "$OUT" '"from": "local-hook"'
+
+echo "23. chat-as-reply relay: @name lines in the agent's visible response reach the contributor"
+$HUB send --as relaypal --to central "does the relay work?" >/dev/null
+RELAY_MSG_ID=$($HUB inbox --as central | grep "does the relay work" | grep -o 'm-[a-f0-9]*')
+curl -s -X POST "$HUB_URL/api/ack" -H 'content-type: application/json' -H 'x-hub-user: central' \
+  -d "{\"id\":\"$RELAY_MSG_ID\",\"level\":\"delivered\"}" >/dev/null
+cat >> "$TRANSCRIPT" <<'EOF'
+{"type":"assistant","uuid":"relay-turn-1","message":{"role":"assistant","content":[{"type":"text","text":"Relaypal asked whether the relay works.\n@relaypal: yes - this sentence travelled from the chat UI to your inbox.\nAnything else?"}]},"timestamp":"2026-09-08T02:00:00Z"}
+EOF
+sleep 1
+OUT=$($HUB inbox --as relaypal)
+check "relayed line arrived"     "$OUT" "travelled from the chat UI"
+check "attributed to central"    "$OUT" "from central"
+OUT=$($HUB inbox --as central --all)
+check "inbound auto-acked replied" "$(echo "$OUT" | grep 'does the relay work')" "acted:replied"
+
+echo "24. relay idempotency: turn is swept once, resend converges"
+sleep 1
+OUT=$($HUB inbox --as relaypal --all)
+check "exactly one relayed message" "$(echo "$OUT" | grep -c 'travelled from the chat UI')" "1"
 
 echo
 echo "── $pass passed, $fail failed"

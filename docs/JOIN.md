@@ -70,6 +70,12 @@ relays it verbatim (that's the convention; agents are instructed never to
 paraphrase `@`-addressed lines). Jeremy's side works the same way in reverse: when
 his agent writes `@you: …` in its response, that exact sentence lands in your inbox.
 
+**You decide what gets sent:** agents are instructed to show you a draft and get
+your go-ahead before sending anything they composed themselves (`@`-lines you
+typed are pre-authorized by definition). For hard enforcement, don't add
+`send_message` to your tool allowlist — then Claude Code shows you every outbound
+message in a permission prompt before it leaves your machine.
+
 ### C. CLI (if you clone [the repo](https://github.com/jeremy-nc/claude-central))
 
 ```bash

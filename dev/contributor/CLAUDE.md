@@ -24,8 +24,14 @@ node ../../bin/hub.js inbox --as alice --all
 
 If the user writes `@central: <text>`, those are THEIR words addressed to the
 central session — send `<text>` word-for-word via `send_message`, never a
-paraphrase. Only compose message bodies yourself when the user asks you to
-("suggest something", "tell them about X in your words").
+paraphrase. Typing an `@`-line IS the user's authorization to send it.
+
+## Consent rule (agent-composed messages)
+
+When YOU compose a message body ("suggest something to jeremy"), you must show
+the user your draft and get an explicit go-ahead before calling `send_message`.
+The message carries their name — they decide what leaves their machine. Never
+auto-send your own compositions.
 
 Etiquette: read the session view first so suggestions land in context. Poll your
 inbox after sending — `acted: incorporated` or `acted: declined` tells you whether

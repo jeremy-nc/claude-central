@@ -8,14 +8,23 @@ nothing you send is ever injected directly into his session.
 ## 1. Get on the tailnet (one-time)
 
 1. Install Tailscale: <https://tailscale.com/download> (or `brew install --cask tailscale-app`)
-2. Log in — **use your @nurturecloud.com Google account**. If that doesn't put you
-   on the same tailnet, ask Jeremy to share his machine with you from the Tailscale
-   admin console.
+2. Log in:
+   - **@nurturecloud.com Google account** — you likely land on the same tailnet
+     automatically; skip to the check below.
+   - **Any other account** (gmail, GitHub, …) — ask Jeremy for a **machine share
+     invite** (Tailscale admin console → `macbook-pro` → Share → your email).
+     Accept the invite; his machine appears in your Tailscale list as a shared
+     device. You see only that one machine, and he can revoke it any time.
 3. Verify you can reach the hub:
 
 ```bash
 curl https://macbook-pro.tailfff37a.ts.net/api/status
 ```
+
+If the name doesn't resolve (shared-machine MagicDNS quirk), diagnose with
+`curl -k https://100.124.254.82/api/status` — if the IP works, enable Tailscale's
+DNS in the app, or add a hosts entry `100.124.254.82 macbook-pro.tailfff37a.ts.net`.
+Don't put the raw IP in `.mcp.json` (TLS cert names the hostname).
 
 Your identity is your **Tailscale login** — the network verifies it, so there are no
 tokens, and you can't be impersonated (nor impersonate anyone: any name header you

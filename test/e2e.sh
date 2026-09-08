@@ -141,6 +141,20 @@ $HUB send --as alice --to hookee "third" >/dev/null
 OUT=$(printf '{"session_id":"s2","transcript_path":"%s","prompt":"x"}' "$TRANSCRIPT" | HUB_USER=hookee node hooks/user-prompt-submit.js)
 check "relay rule present" "$OUT" '@<name>'
 
+echo "22. serve-mode identity: Tailscale-User-Login wins over X-Hub-User"
+PORT2=4798
+DATA2=$(mktemp -d)
+HUB_PORT=$PORT2 HUB_DATA=$DATA2 HUB_TAILSCALE=serve node src/server.js & SERVER2_PID=$!
+trap 'kill $SERVER_PID $SERVER2_PID 2>/dev/null' EXIT
+for _ in $(seq 1 20); do curl -sf "http://127.0.0.1:$PORT2/api/status" >/dev/null 2>&1 && break; sleep 0.1; done
+OUT=$(curl -s -X POST "http://127.0.0.1:$PORT2/api/send" -H 'content-type: application/json' \
+  -H 'Tailscale-User-Login: real@tailnet.example' -H 'X-Hub-User: spoofed-name' \
+  -d '{"to":"central","body":"identity test"}')
+check "tailscale identity used" "$OUT" '"from": "real@tailnet.example"'
+OUT=$(curl -s -X POST "http://127.0.0.1:$PORT2/api/send" -H 'content-type: application/json' \
+  -H 'X-Hub-User: local-hook' -d '{"to":"central","body":"local fallback"}')
+check "local header fallback works" "$OUT" '"from": "local-hook"'
+
 echo
 echo "── $pass passed, $fail failed"
 [[ $fail -eq 0 ]]

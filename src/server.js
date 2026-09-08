@@ -9,7 +9,7 @@ import { Store } from './store.js';
 import { sessionView } from './tailer.js';
 import { forkSession } from './fork.js';
 import { handleMcp } from './mcp.js';
-import { resolveUser } from './identity.js';
+import { resolveUser, identityMode } from './identity.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.HUB_PORT ?? 4780);
@@ -96,8 +96,12 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`session-hub listening on http://127.0.0.1:${PORT}  (data: ${DATA_DIR})`);
+// In serve mode remote traffic must only be able to arrive via the local
+// `tailscale serve` proxy — bind localhost so the identity header can't be
+// spoofed by a direct remote connection.
+const BIND = process.env.HUB_BIND ?? (identityMode() === 'serve' ? '127.0.0.1' : '0.0.0.0');
+server.listen(PORT, BIND, () => {
+  console.log(`session-hub listening on http://${BIND}:${PORT}  (data: ${DATA_DIR})`);
   console.log(`  web UI: http://127.0.0.1:${PORT}/   MCP: http://127.0.0.1:${PORT}/mcp`);
-  console.log(`  identity: ${process.env.HUB_TAILSCALE === '1' ? 'tailscale whois' : 'dev header (X-Hub-User)'}`);
+  console.log(`  identity: ${identityMode()}`);
 });

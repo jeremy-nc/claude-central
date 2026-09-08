@@ -20,3 +20,17 @@ If the user asks to "check messages", run:
 ```
 node ../../bin/hub.js inbox --as central
 ```
+
+## Background watcher (event-driven idle coverage)
+
+If the user asks you to "watch for messages" (or start the watcher), run this AS A
+BACKGROUND task:
+
+```
+node ../../bin/hub.js watch --as central
+```
+
+It sits silently and exits the moment a message arrives — the task completion wakes
+you. When that happens: disposition every listed message (reply + ack acted), then
+restart the watcher in the background again. Keep this loop going until the user
+tells you to stop watching.

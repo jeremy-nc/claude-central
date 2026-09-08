@@ -7,6 +7,7 @@
 //   hub ack   <id> <delivered|acted> [detail]  --as central
 //   hub view  [--owner central]
 //   hub status
+//   hub watch [--as central] [--interval ms]  # blocks until a message arrives, then exits
 //   hub fork  [--owner central]   # experimental: redacted session copy, resumable locally
 const HUB_URL = process.env.HUB_URL ?? 'http://127.0.0.1:4780';
 
@@ -68,6 +69,29 @@ try {
       console.log(`session view (${view.totalTurns} turns, showing last ${view.turns.length}):\n`);
       for (const t of view.turns) console.log(`  ${t.role === 'user' ? '❯' : '⏺'} ${t.text.replaceAll('\n', '\n    ')}`);
       break;
+    }
+    case 'watch': {
+      // Background watcher: sits quietly until a message arrives, then EXITS.
+      // Run it as a background task from a Claude session — the task exiting is
+      // what wakes the agent (event-driven idle coverage, no polling turns).
+      const who = user ?? 'central';
+      const intervalMs = Number(flags.interval ?? 2000);
+      console.log(`watching inbox for ${who} — exiting on first unread message`);
+      for (;;) {
+        try {
+          const { count } = await call('GET', `/api/unread?user=${who}`);
+          if (count > 0) {
+            const msgs = await call('GET', '/api/inbox', { user: who });
+            console.log(`\n${count} message(s) arrived for ${who}:`);
+            for (const m of msgs) console.log(`  ${m.id} from ${m.from}: ${m.body}`);
+            console.log('\nACTION: drain and disposition these (reply + ack acted), then restart this watcher in the background.');
+            process.exit(0);
+          }
+        } catch {
+          // hub restarting — keep watching
+        }
+        await new Promise((r) => setTimeout(r, intervalMs));
+      }
     }
     case 'fork': {
       const { mkdirSync, writeFileSync } = await import('node:fs');

@@ -10,7 +10,9 @@ const TOOLS = [
     name: 'send_message',
     description:
       'Send a message to a participant on the Session Hub (e.g. the central session, addressed as "central"). ' +
-      'Fire-and-forget: it lands in their inbox and is delivered at their next turn boundary.',
+      'Fire-and-forget: it lands in their inbox and is delivered at their next turn boundary. ' +
+      'VERBATIM RULE: if your user writes "@central: <text>" (or "@<name>: <text>"), send <text> word-for-word ' +
+      'as the body — those are their words, never paraphrase or embellish them.',
     inputSchema: {
       type: 'object',
       properties: {

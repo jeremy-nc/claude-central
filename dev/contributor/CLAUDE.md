@@ -20,6 +20,13 @@ node ../../bin/hub.js send --as alice --to central "your suggestion"
 node ../../bin/hub.js inbox --as alice --all
 ```
 
+## Addressing convention (verbatim relay)
+
+If the user writes `@central: <text>`, those are THEIR words addressed to the
+central session — send `<text>` word-for-word via `send_message`, never a
+paraphrase. Only compose message bodies yourself when the user asks you to
+("suggest something", "tell them about X in your words").
+
 Etiquette: read the session view first so suggestions land in context. Poll your
 inbox after sending — `acted: incorporated` or `acted: declined` tells you whether
 your suggestion was engaged with, not just seen.

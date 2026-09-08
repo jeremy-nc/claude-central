@@ -65,6 +65,11 @@ Your agent gets:
 
 Try: *"read jeremy's session and suggest something useful, then send it to central"*.
 
+**Speaking in your own words:** type `@central: your exact message` — your agent
+relays it verbatim (that's the convention; agents are instructed never to
+paraphrase `@`-addressed lines). Jeremy's side works the same way in reverse: when
+his agent writes `@you: …` in its response, that exact sentence lands in your inbox.
+
 ### C. CLI (if you clone [the repo](https://github.com/jeremy-nc/claude-central))
 
 ```bash

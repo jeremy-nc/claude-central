@@ -10,6 +10,7 @@ import { sessionView } from './tailer.js';
 import { forkSession } from './fork.js';
 import { handleMcp } from './mcp.js';
 import { resolveUser, identityMode } from './identity.js';
+import { containedPath, TRANSCRIPT_ROOT } from './transcripts.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.HUB_PORT ?? 4780);
@@ -65,20 +66,31 @@ const server = createServer(async (req, res) => {
       const who = url.searchParams.get('user') ?? 'central';
       return json(res, 200, { user: who, count: store.unreadCount(who) });
     }
-    // POST /api/register-session {owner, transcriptPath, sessionId} — hook self-registration
+    // POST /api/register-session {owner, transcriptPath, sessionId} — hook self-registration.
+    // Identity required and owner must be the caller: a registered path is read
+    // back by /api/session-view and /api/fork, so an unauthenticated register is
+    // a way to make the Hub serve a transcript that was never shared with it.
     if (req.method === 'POST' && url.pathname === '/api/register-session') {
+      if (!user) return json(res, 401, { error: 'identity required' });
       const { owner, transcriptPath, sessionId } = await readBody(req);
       if (!owner || !transcriptPath) return json(res, 400, { error: 'owner and transcriptPath required' });
-      store.registerSession(owner, transcriptPath, sessionId);
+      if (owner !== user) return json(res, 403, { error: 'owner must be the calling identity' });
+      const contained = containedPath(transcriptPath);
+      if (!contained) {
+        return json(res, 400, { error: `transcriptPath must be an existing file under ${TRANSCRIPT_ROOT}` });
+      }
+      store.registerSession(owner, contained, sessionId);
       return json(res, 200, { ok: true });
     }
     // GET /api/session-view?owner=central — curated view from the JSONL tail
     if (req.method === 'GET' && url.pathname === '/api/session-view') {
+      if (!user) return json(res, 401, { error: 'identity required' });
       const owner = url.searchParams.get('owner') ?? 'central';
       return json(res, 200, sessionView(store.sessionFor(owner)?.transcriptPath));
     }
     // GET /api/fork?owner=central — redacted, resumable session JSONL (experimental)
     if (req.method === 'GET' && url.pathname === '/api/fork') {
+      if (!user) return json(res, 401, { error: 'identity required' });
       const owner = url.searchParams.get('owner') ?? 'central';
       const fork = forkSession(store.sessionFor(owner)?.transcriptPath);
       if (!fork) return json(res, 404, { error: 'no forkable session registered' });

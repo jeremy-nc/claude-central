@@ -61,7 +61,7 @@ try {
       break;
     }
     case 'view': {
-      const view = await call('GET', `/api/session-view?owner=${flags.owner ?? 'central'}`);
+      const view = await call('GET', `/api/session-view?owner=${flags.owner ?? 'central'}`, { user });
       if (!view.available) {
         console.log(`no session view: ${view.reason}`);
         break;
@@ -96,7 +96,7 @@ try {
     case 'fork': {
       const { mkdirSync, writeFileSync } = await import('node:fs');
       const { homedir } = await import('node:os');
-      const fork = await call('GET', `/api/fork?owner=${flags.owner ?? 'central'}`);
+      const fork = await call('GET', `/api/fork?owner=${flags.owner ?? 'central'}`, { user });
       const projectDir = `${homedir()}/.claude/projects/${process.cwd().replaceAll(/[/.]/g, '-')}`;
       mkdirSync(projectDir, { recursive: true });
       writeFileSync(`${projectDir}/${fork.sessionId}.jsonl`, fork.jsonl);

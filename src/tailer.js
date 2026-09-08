@@ -2,7 +2,8 @@
 // Read-only, on-demand, defensive: the JSONL format is Claude Code's private
 // state — unknown line shapes are skipped, never fatal. The transcript is
 // derived, not stored (design doc: "the log is theirs, the view is ours").
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { readCapped } from './transcripts.js';
 
 const MAX_TURNS = 50;
 const MAX_TEXT = 600;
@@ -23,7 +24,7 @@ export function sessionView(transcriptPath) {
     return { available: false, turns: [], reason: 'no transcript registered or file missing' };
   }
   const turns = [];
-  for (const line of readFileSync(transcriptPath, 'utf8').split('\n')) {
+  for (const line of readCapped(transcriptPath).split('\n')) {
     if (!line.trim()) continue;
     let entry;
     try {

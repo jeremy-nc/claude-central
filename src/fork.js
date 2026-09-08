@@ -7,8 +7,9 @@
 // meta entries — where secrets live — are stripped. Because dropping entries
 // breaks the uuid/parentUuid chain, the chain is rebuilt as a fresh linear
 // history under a new session id.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { readCapped } from './transcripts.js';
 
 export function forkSession(transcriptPath) {
   if (!transcriptPath || !existsSync(transcriptPath)) return null;
@@ -16,7 +17,7 @@ export function forkSession(transcriptPath) {
   const lines = [];
   let parentUuid = null;
 
-  for (const line of readFileSync(transcriptPath, 'utf8').split('\n')) {
+  for (const line of readCapped(transcriptPath).split('\n')) {
     if (!line.trim()) continue;
     let entry;
     try {

@@ -17,7 +17,7 @@ cat > "$TRANSCRIPT" <<'EOF'
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Cut-over is done. Open decision: the retry policy."}]},"timestamp":"2026-09-08T01:00:05Z"}
 EOF
 
-HUB_PORT=$PORT HUB_DATA=$DATA node src/server.js & SERVER_PID=$!
+HUB_PORT=$PORT HUB_DATA=$DATA HUB_TRANSCRIPT_ROOT=$DATA node src/server.js & SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null' EXIT
 for _ in $(seq 1 20); do curl -sf "$HUB_URL/api/status" >/dev/null 2>&1 && break; sleep 0.1; done
 
@@ -63,7 +63,7 @@ OUT=$(echo '{}' | HUB_USER=central node statusline/unread.js)
 check "no unread left" "$OUT" "0 unread"
 
 echo "8. curated session view (from the registered transcript)"
-OUT=$($HUB view --owner central)
+OUT=$($HUB view --as central --owner central)
 check "view derived from JSONL" "$OUT" "retry policy"
 
 echo "9. idempotency — resend with same id converges"
@@ -108,11 +108,11 @@ OUT=$(curl -s "$HUB_URL/")
 check "html page" "$OUT" "SESSION"
 
 echo "16. fork: redacted + causally rebuilt"
-OUT=$(curl -s "$HUB_URL/api/fork?owner=central")
+OUT=$(curl -s -H 'x-hub-user: alice' "$HUB_URL/api/fork?owner=central")
 check "fork produced"      "$OUT" '"turns": 2'
 check "new session id"     "$OUT" '"sessionId"'
 check "text survived"      "$OUT" "retry policy"
-OUT=$(curl -s "$HUB_URL/api/fork?owner=nobody")
+OUT=$(curl -s -H 'x-hub-user: alice' "$HUB_URL/api/fork?owner=nobody")
 check "unknown owner 404s" "$OUT" "no forkable session"
 
 echo "17. Stop hook: blocks the stop when messages arrived mid-turn"
@@ -144,7 +144,7 @@ check "relay rule present" "$OUT" '@<name>'
 echo "22. serve-mode identity: Tailscale-User-Login wins over X-Hub-User"
 PORT2=4798
 DATA2=$(mktemp -d)
-HUB_PORT=$PORT2 HUB_DATA=$DATA2 HUB_TAILSCALE=serve node src/server.js & SERVER2_PID=$!
+HUB_PORT=$PORT2 HUB_DATA=$DATA2 HUB_TRANSCRIPT_ROOT=$DATA2 HUB_TAILSCALE=serve node src/server.js & SERVER2_PID=$!
 trap 'kill $SERVER_PID $SERVER2_PID 2>/dev/null' EXIT
 for _ in $(seq 1 20); do curl -sf "http://127.0.0.1:$PORT2/api/status" >/dev/null 2>&1 && break; sleep 0.1; done
 OUT=$(curl -s -X POST "http://127.0.0.1:$PORT2/api/send" -H 'content-type: application/json' \
@@ -154,6 +154,44 @@ check "tailscale identity used" "$OUT" '"from": "real@tailnet.example"'
 OUT=$(curl -s -X POST "http://127.0.0.1:$PORT2/api/send" -H 'content-type: application/json' \
   -H 'X-Hub-User: local-hook' -d '{"to":"central","body":"local fallback"}')
 check "local header fallback works" "$OUT" '"from": "local-hook"'
+
+echo "23. transcript endpoints require identity"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' "$HUB_URL/api/session-view?owner=central")
+check "session-view anonymous rejected" "$CODE" "401"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' "$HUB_URL/api/fork?owner=central")
+check "fork anonymous rejected" "$CODE" "401"
+OUT=$(curl -s -X POST "$HUB_URL/api/register-session" -H 'content-type: application/json' \
+  -d "{\"owner\":\"central\",\"transcriptPath\":\"$TRANSCRIPT\"}")
+check "register anonymous rejected" "$OUT" "identity required"
+
+echo "24. register-session: owner must be the caller"
+OUT=$(curl -s -X POST "$HUB_URL/api/register-session" -H 'content-type: application/json' \
+  -H 'x-hub-user: mallory' -d "{\"owner\":\"central\",\"transcriptPath\":\"$TRANSCRIPT\"}")
+check "owner mismatch rejected" "$OUT" "owner must be the calling identity"
+OUT=$($HUB view --as central --owner central)
+check "central's view unchanged" "$OUT" "retry policy"
+
+echo "25. register-session: path contained under the transcript root"
+OUTSIDE=$(mktemp -d)/outside.jsonl
+echo '{"type":"user","message":{"role":"user","content":"secret from another session"},"timestamp":"2026-09-08T02:00:00Z"}' > "$OUTSIDE"
+OUT=$(curl -s -X POST "$HUB_URL/api/register-session" -H 'content-type: application/json' \
+  -H 'x-hub-user: mallory' -d "{\"owner\":\"mallory\",\"transcriptPath\":\"$OUTSIDE\"}")
+check "path outside root rejected" "$OUT" "must be an existing file under"
+OUT=$(curl -s -H 'x-hub-user: mallory' "$HUB_URL/api/session-view?owner=mallory")
+check "nothing served for mallory" "$OUT" '"available": false'
+
+echo "26. register-session: symlink out of the root is refused"
+ln -s "$OUTSIDE" "$DATA/escape.jsonl"
+OUT=$(curl -s -X POST "$HUB_URL/api/register-session" -H 'content-type: application/json' \
+  -H 'x-hub-user: mallory' -d "{\"owner\":\"mallory\",\"transcriptPath\":\"$DATA/escape.jsonl\"}")
+check "symlink escape rejected" "$OUT" "must be an existing file under"
+
+echo "27. register-session: own contained path still works"
+OUT=$(curl -s -X POST "$HUB_URL/api/register-session" -H 'content-type: application/json' \
+  -H 'x-hub-user: alice' -d "{\"owner\":\"alice\",\"transcriptPath\":\"$TRANSCRIPT\"}")
+check "legitimate register accepted" "$OUT" '"ok": true'
+OUT=$($HUB view --as alice --owner alice)
+check "alice's own view available" "$OUT" "retry policy"
 
 echo
 echo "── $pass passed, $fail failed"
